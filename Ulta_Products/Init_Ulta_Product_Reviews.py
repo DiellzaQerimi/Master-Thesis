@@ -3,7 +3,7 @@ import csv
 import time
 
 INPUT_CSV = "Ulta_Products.csv"
-OUTPUT_CSV = "Ulta_Product_Reviews.csv"
+OUTPUT_CSV = "Init_Ulta_Product_Reviews.csv"
 BASE_URL = "https://display.powerreviews.com"
 API_KEY = "daa0f241-c242-4483-afb7-4449942d1a2b"
 PAGE_SIZE = 24

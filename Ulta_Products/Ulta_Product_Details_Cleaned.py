@@ -2,7 +2,7 @@ import re
 import pandas as pd
 
 # ---- Load CSV File ----
-df = pd.read_csv("Ulta_Product_Details.csv", low_memory=False)
+df = pd.read_csv("Ulta_Products/Ulta_Product_Details.csv", low_memory=False)
 text_col = "about_the_product"
 
 # ---- Constants ----
@@ -239,7 +239,7 @@ result = {
 }
 
 # Save cleaned
-out_path = "Ulta_Product_Details_Cleaned.csv"
+out_path = "Ulta_Products/Ulta_Product_Details_Cleaned.csv"
 df.to_csv(out_path, index=False, encoding="utf-8-sig")
 print(result)
 # result, out_path

@@ -47,7 +47,7 @@ def clean_text_block(text, start_pat, stop_pat):
 
 
 # ---- Load CSV File ----
-df = pd.read_csv("Sephora_Product_Details.csv")
+df = pd.read_csv("Sephora_Products/Sephora_Product_Details.csv")
 
 # ---- Cleaning ----
 df = drop_if_contains(df, 'product', "perfume")
@@ -173,7 +173,7 @@ df = clean_column(df, 'skin_concerns', [
 df['source'] = "Sephora"
 
 pd.set_option('display.max_colwidth', None)  # don’t cut off long text
-df.to_csv("Sephora_Product_Details_Cleaned.csv", index=False, encoding="utf-8-sig")
+df.to_csv("Sephora_Products/Sephora_Product_Details_Cleaned.csv", index=False, encoding="utf-8-sig")
 
 id_ = "P510508"
 result = {
