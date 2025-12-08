@@ -6,7 +6,7 @@ PASSKEY = "calXm2DyQVjcCy9agq85vmTJv5ELuuBCF2sdg4BnJzJus"
 LOCALE = "en_US"
 LIMIT = 100  # max reviews per request
 INPUT_CSV = "Sephora_Products.csv"   # input file with product IDs  
-OUTPUT_CSV = "Sephora_Product_Reviews.csv"  # output file with product reviews
+OUTPUT_CSV = "Init_Sephora_Product_Reviews.csv"  # output file with product reviews
 
 def fetch_user_reviews(product_id):
     offset = 0
@@ -73,7 +73,7 @@ def main():
 
     if all_user_reviews:
         keys = all_user_reviews[0].keys()
-        with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as output_file:
+        with open(OUTPUT_CSV, "w", newline="", encoding="utf-8-sig") as output_file:
             writer = csv.DictWriter(output_file, fieldnames=keys)
             writer.writeheader()
             writer.writerows(all_user_reviews)
