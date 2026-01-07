@@ -3,7 +3,7 @@ import datetime as date
 
 # Load datasets
 df_ulta = pd.read_csv("Ulta_Products/Ulta_Product_Details.csv", low_memory=False)
-df_reviews = pd.read_csv("Ulta_Products/Init_Ulta_Product_Reviews.csv", low_memory=False)
+df_reviews = pd.read_csv("Init_Ulta_Product_Reviews.csv", low_memory=False)
 
 # Keep only product_id + product name
 df_ulta_small = df_ulta[["product_id", "product", "brand"]].drop_duplicates()
