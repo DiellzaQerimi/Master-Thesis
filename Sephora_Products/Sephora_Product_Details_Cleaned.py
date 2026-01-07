@@ -114,11 +114,6 @@ def get_skin_types(text):
     if not found:
         return pd.NA
 
-    # If ALL 4 are present → All Skin Types
-    required = {"normal", "dry", "combination", "oily"}
-    if required.issubset(found):
-        return "All Skin Types"
-
     # otherwise return the found ones
     return ", ".join(sorted([x.capitalize() for x in found]))
 

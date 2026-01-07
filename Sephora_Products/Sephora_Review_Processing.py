@@ -3,7 +3,7 @@ import datetime as date
 
 # Load datasets
 df_sephora = pd.read_csv("Sephora_Products/Sephora_Product_Details.csv", low_memory=False)
-df_reviews = pd.read_csv("Sephora_Products/Init_Sephora_Product_Reviews.csv", low_memory=False)
+df_reviews = pd.read_csv("Init_Sephora_Product_Reviews.csv", low_memory=False)
 
 # Keep only product_id + product name
 df_sephora_small = df_sephora[["product_id", "product", "brand"]].drop_duplicates()
@@ -29,7 +29,7 @@ def classify_season(date):
     else:
         return "Other"  # Apr, May
 
-columns_to_drop = ["skin_type", "skin_tone", "age", "eye_color", "hair_color", "product_name"]
+columns_to_drop = ["eye_color", "hair_color", "product_name"]
 df_combined = df_inner.drop(columns=columns_to_drop, errors='ignore')
 
 # Apply to DataFrame

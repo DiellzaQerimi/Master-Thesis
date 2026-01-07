@@ -92,7 +92,6 @@ def get_skin_type(text):
             r'(?:dry|oily|normal|sensitive|combination)'
             r'(?:[\s,&]*(?:and|to)?[\s,&]*(?:dry|oily|normal|sensitive|combination))*'
             r'\s+skin(?:\s*types?)?|'  
-            r'all\s+skin\s+types?'
             r')\b'
         )
         matches = pattern.findall(text)
@@ -103,19 +102,16 @@ def get_skin_type(text):
 
     if isinstance(val, str) and val.strip():
         type_words = re.findall(
-            r'\b(dry|oily|normal|sensitive|combination|all\s+skin\s+types)\b',
+            r'\b(dry|oily|normal|sensitive|combination)\b',
             val,
             flags=re.I
         )
 
-        order = ['Dry', 'Oily', 'Normal', 'Sensitive', 'Combination', 'All Skin Types']
+        order = ['Dry', 'Oily', 'Normal', 'Sensitive', 'Combination']
         type_clean = sorted(
             {t.title() for t in type_words},
             key=lambda x: order.index(x) if x in order else 999
         )
-
-        if 'All Skin Types' in type_clean and len(type_clean) > 1:
-            return 'All Skin Types'
 
         return ", ".join(type_clean) if type_clean else pd.NA
 
@@ -125,8 +121,8 @@ def get_skin_type(text):
 concern_pat = re.compile(
     r"\b("
     r"fine\s+lines?\s*(?:and|&)?\s*wrinkles?|wrinkles?|fine[\s-]+line[s]?|"
-    r"acne|blemishes?|redness|pores?|"
-    r"dull|dullness|cracked|chapped|"
+    r"acne|blemishes?|redness|pores?|acne-prone\s+skin|"
+    r"dull|dullness|cracked|chapped|psoriasis|rosacea|eczema-prone|"
     r"uneven\s+tone|dark\s+circles?|dark\s+spots?|hyperpigmentation|blackheads?|dryness|"
     r"(?:uneven|rough|improve|refine|smooth)\s+texture|"
     r"oiliness|sensitivity|aging|firmness|elasticity|"
@@ -229,17 +225,18 @@ df['free_of'] = df['free_of'].str.replace(r' / ', ', ', regex=True)
 df['source'] = "Ulta Beauty"
 
 # Sanity check for the product in user's snippet
-id_ = "pimprod2051662"
+id_ = "pimprod2035463"
 result = {
     "description": df.loc[df['product_id'] == id_, 'description'].head(3).tolist(),
     "skin_type": df.loc[df['product_id'] == id_, 'skin_type'].head(3).tolist(),
     "free_of": df.loc[df['product_id'] == id_, 'free_of'].head(3).tolist(),
+    "skin_concerns": df.loc[df['product_id'] == id_, 'skin_concerns'].head(3).tolist(),
     # "ingredients": df.loc[df['product_id'] == id_, 'ingredients'].head(3).tolist(),
     "important_ingredients": df.loc[df['product_id'] == id_, 'important_ingredients'].head(3).tolist(),
 }
 
 # Save cleaned
-out_path = "Ulta_Products/Ulta_Product_Details_Cleaned.csv"
-df.to_csv(out_path, index=False, encoding="utf-8-sig")
+# out_path = "Ulta_Products/Ulta_Product_Details_Cleaned.csv"
+# df.to_csv(out_path, index=False, encoding="utf-8-sig")
 print(result)
 # result, out_path

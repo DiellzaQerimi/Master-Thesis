@@ -31,6 +31,11 @@ for col in df_ulta.columns:
 combined_cols["product"] = df_merged["product_sephora"].combine_first(df_merged["product_ulta"])
 combined_cols["brand"] = df_merged["brand_sephora"].combine_first(df_merged["brand_ulta"])
 
+#Replace 'All skin types' with specific types for better accuracy
+combined_cols["skin_type"] = combined_cols["skin_type"].replace({
+    "All skin types": "normal, dry, oily, combination, sensitive"
+})
+
 # Create final DataFrame
 df_combined = pd.DataFrame(combined_cols)
 
