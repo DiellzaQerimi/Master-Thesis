@@ -1,0 +1,4 @@
+streamlit
+openai
+qdrant-client
+python-dotenv
