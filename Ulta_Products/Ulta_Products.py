@@ -7,7 +7,6 @@ import time
 import re
 import pandas as pd
 
-
 driver = webdriver.Chrome()
 driver.get("https://www.ulta.com/shop/skin-care/all")
 wait = WebDriverWait(driver, 20)
@@ -16,10 +15,12 @@ product_selector = 'a.pal-c-Link--primary[href*="/p/"]'
 all_links = set()
 productLinks = []
 
+# Collects all currently loaded product links from the page
 def get_all_product_links():
     elements = driver.find_elements(By.CSS_SELECTOR, product_selector)
     return {el.get_attribute("href") for el in elements if el.get_attribute("href")}
 
+# Scrolls down gradually to trigger lazy loading until the page height stops changing
 def smooth_scroll_to_bottom(step=300, pause=0.7, max_no_change=3):
     no_change_count = 0
     last_height = driver.execute_script("return document.body.scrollHeight")
@@ -35,28 +36,25 @@ def smooth_scroll_to_bottom(step=300, pause=0.7, max_no_change=3):
             no_change_count = 0
             last_height = new_height
 
-# Initial scroll + load
+# Loads the initial set of products by scrolling and collecting visible links
 smooth_scroll_to_bottom()
 all_links.update(get_all_product_links())
 print(f"Initially loaded products: {len(all_links)}")
 
+# Continuously clicks the load button to retrieve more products until nothing new is loaded
 while True:
-    # scroll a bit so the button is actually attached to the DOM
     smooth_scroll_to_bottom()
 
     try:
-        # (re)‑find it every loop ‑‑ don't reuse an old WebElement
         show_more = wait.until(
             EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.LoadContent__button'))
         )
 
-        # scroll it into view, then JS‑click
         driver.execute_script(
             "arguments[0].scrollIntoView({block:'center'});", show_more
         )
         driver.execute_script("arguments[0].click();", show_more)
 
-        # wait for at least one new product card to appear
         WebDriverWait(driver, 15).until(
             lambda d: len(get_all_product_links()) > len(all_links)
         )
@@ -67,17 +65,16 @@ while True:
         print("No more button, or nothing new loaded.")
         break
 
-
-
 print(f"\nDone! Total products found: {len(all_links)}")
 
+# Extracts Product IDs from product URLs and stores them alongside their links
 for link in all_links:
     match = re.search(r'(pimprod\d+)', link)
     if match:
         pid = match.group(1)
         productLinks.append({"Link": link, "Product ID": pid})
 
-# Save to CSV
+# Saves the collected product links and IDs into a CSV file
 df = pd.DataFrame(productLinks)
 df = df.drop_duplicates(subset="Product ID")  # remove duplicates
 csv_file = "Ulta_Products1.csv"

@@ -12,59 +12,38 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
 
-
-# =========================================================
-# PART 0 — SETTINGS
-# =========================================================
-
+# Loads environment variables and defines ingestion settings (collection, model, batching, input files)
 load_dotenv()
-
-# ✅ NEW collection so we don't mix old random UUID ids with new stable ids
 COLLECTION_NAME = "product_reviews"
-
 EMBED_MODEL = "text-embedding-3-small"
-
-# Embedding batch size (safe + stable)
 BATCH_SIZE = 128
 
-# Qdrant connection
+# Configures Qdrant connection parameters and request sizing
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:6333")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")  # ✅ correct env var for Qdrant
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 QDRANT_TIMEOUT = 120
 
-# Qdrant request safety: avoid 32MB JSON limit
-UPSERT_CHUNK = 200  # 100–300 is typical
-
-# Optional: Keep payload smaller (does NOT affect embeddings)
-MAX_PAYLOAD_REVIEW_CHARS = 1200  # set to None to store full text (not recommended for huge scale)
-
-# If you rerun tomorrow, this prevents re-embedding already stored IDs
+# Controls upsert chunk size and payload size limits
+UPSERT_CHUNK = 200
+MAX_PAYLOAD_REVIEW_CHARS = 1200
 SKIP_EXISTING_IN_QDRANT = True
-
-# Review text used for hash/id stability (avoid hashing extreme lengths)
 MAX_HASH_TEXT_CHARS = 8000
 
+# Defines input review files and their associated source labels
 INPUT_FILES = [
-    # ("Ulta_Product_Reviews.csv", "Ulta Beauty"),
+    ("Ulta_Product_Reviews.csv", "Ulta Beauty"),
     ("Sephora_Product_Reviews.csv", "Sephora"),
 ]
 
-
-# =========================================================
-# PART 1 — CLIENTS
-# =========================================================
-
+# Initializes OpenAI and Qdrant clients
 openai_client = OpenAI()
 qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY, timeout=QDRANT_TIMEOUT)
 
-
-# =========================================================
-# PART 2 — HELPERS
-# =========================================================
-
+# Builds a normalized brand+product identifier
 def make_brand_product_id(brand: str, product: str) -> str:
     return f"{brand.strip().lower()} {product.strip().lower()}"
 
+# Converts various date formats into ISO format when possible
 def to_iso_date(x: Any) -> str:
     if pd.isna(x):
         return ""
@@ -76,24 +55,23 @@ def to_iso_date(x: Any) -> str:
             pass
     return s
 
+# Generates embeddings for a list of texts
 def embed_texts(texts: List[str]) -> List[List[float]]:
     resp = openai_client.embeddings.create(model=EMBED_MODEL, input=texts)
     return [d.embedding for d in resp.data]
 
+# Wraps embedding call with retry logic for robustness
 def embed_texts_retry(texts: List[str], max_retries: int = 6) -> List[List[float]]:
-    """
-    Retries for transient network/rate-limit errors.
-    Keeps your overnight run more stable.
-    """
     for attempt in range(max_retries):
         try:
             return embed_texts(texts)
         except Exception as e:
             wait = min(60, 2 ** attempt)
-            print(f"⚠️ Embedding error: {e} | retrying in {wait}s...")
+            print(f"Embedding error: {e} | retrying in {wait}s...")
             time.sleep(wait)
     raise RuntimeError("Embedding failed after retries.")
 
+# Retrieves a column value using flexible case-insensitive matching
 def get_col(df: pd.DataFrame, row: pd.Series, names: List[str], default: str = "") -> str:
     lower_map = {c.lower(): c for c in df.columns}
     for name in names:
@@ -103,6 +81,7 @@ def get_col(df: pd.DataFrame, row: pd.Series, names: List[str], default: str = "
             return "" if pd.isna(val) else str(val).strip()
     return default
 
+# Retrieves a numeric column value and converts it to float
 def get_num(df: pd.DataFrame, row: pd.Series, names: List[str]) -> Optional[float]:
     s = get_col(df, row, names, default="")
     if not s:
@@ -112,6 +91,7 @@ def get_num(df: pd.DataFrame, row: pd.Series, names: List[str]) -> Optional[floa
     except Exception:
         return None
 
+# Generates a deterministic review ID to avoid duplication across runs
 def stable_review_id(
     source: str,
     brand: str,
@@ -120,33 +100,20 @@ def stable_review_id(
     text: str,
     date_iso: str,
 ) -> str:
-    """
-    Deterministic ID: same review -> same ID across runs.
-    If you rerun tomorrow, Qdrant will overwrite the same point instead of duplicating.
-    """
     title = (title or "").strip()
     text = (text or "").strip()
 
-    # Clamp the hashed content for performance + stability
     if len(text) > MAX_HASH_TEXT_CHARS:
         text = text[:MAX_HASH_TEXT_CHARS]
 
-    # ✅ Include date_iso so identical text posted on different dates becomes distinct (optional but usually correct)
     raw = f"{source}|{brand}|{product}|{title}|{date_iso}|{text}"
     return hashlib.sha1(raw.encode("utf-8", errors="ignore")).hexdigest()
 
+# Converts a review_id hash into a deterministic UUID for Qdrant
 def qdrant_point_id_from_review_id(review_id: str) -> str:
-    """
-    Qdrant point IDs must be either unsigned int or UUID.
-    Your review_id is a sha1 hex string, so convert it to a deterministic UUID.
-    """
     return str(uuid.uuid5(uuid.NAMESPACE_URL, review_id))
 
-
-# =========================================================
-# PART 3 — COLLECTION
-# =========================================================
-
+# Ensures the Qdrant collection exists with correct vector size and cosine distance
 def ensure_collection(vector_size: int) -> None:
     existing = [c.name for c in qdrant.get_collections().collections]
     if COLLECTION_NAME not in existing:
@@ -154,15 +121,11 @@ def ensure_collection(vector_size: int) -> None:
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
-        print(f"✅ Created collection: {COLLECTION_NAME}")
+        print(f"Created collection: {COLLECTION_NAME}")
     else:
-        print(f"ℹ️ Collection already exists: {COLLECTION_NAME}")
+        print(f"Collection already exists: {COLLECTION_NAME}")
 
-
-# =========================================================
-# PART 4 — ROW → PAYLOAD + EMB TEXT
-# =========================================================
-
+# Converts a review row into payload and embedding text
 def row_to_payload_and_text(df: pd.DataFrame, r: pd.Series, source_name: str) -> tuple[Dict[str, Any], str]:
     brand_display = get_col(df, r, ["brand"])
     product_display = get_col(df, r, ["product"])
@@ -177,13 +140,11 @@ def row_to_payload_and_text(df: pd.DataFrame, r: pd.Series, source_name: str) ->
     skin_type = get_col(df, r, ["skin_type"])
     age_range = get_col(df, r, ["age"])
     
-
     if not brand_display or not product_display:
-        raise ValueError("Missing brand/product in row. Check your CSV headers.")
+        raise ValueError("Missing brand/product in row.")
 
     brand_product_id = make_brand_product_id(brand_display, product_display)
 
-    # ✅ Deterministic review_id (sha1 string) stored in payload
     review_id = stable_review_id(
         source=source_name,
         brand=brand_display,
@@ -193,31 +154,25 @@ def row_to_payload_and_text(df: pd.DataFrame, r: pd.Series, source_name: str) ->
         date_iso=review_date,
     )
 
-    # ✅ Deterministic Qdrant point ID (UUID string)
     point_id = qdrant_point_id_from_review_id(review_id)
 
-    # Embedding text uses FULL review text (best quality)
     emb_text = (f"{title}\n{review_text_raw}").strip() if title else (review_text_raw or "").strip()
     if not emb_text:
         return {}, ""
 
-    # Payload can store truncated review text to keep Qdrant writes smaller
     review_text_payload = review_text_raw
     if MAX_PAYLOAD_REVIEW_CHARS is not None and review_text_payload:
         review_text_payload = review_text_payload[:MAX_PAYLOAD_REVIEW_CHARS]
 
     payload = {
-        "review_id": review_id,       # sha1 string
-        "point_id": point_id,         # UUID string used as Qdrant ID (handy for debugging)
+        "review_id": review_id,
+        "point_id": point_id,
         "source": source_name,
-
         "brand_display": brand_display,
         "product_display": product_display,
         "brand_product_id": brand_product_id,
-
         "title": title,
         "review_text": review_text_payload,
-
         "rating": rating,
         "review_date": review_date,
         "season": season,
@@ -227,16 +182,8 @@ def row_to_payload_and_text(df: pd.DataFrame, r: pd.Series, source_name: str) ->
 
     return payload, emb_text
 
-
-# =========================================================
-# PART 5 — INGEST (RESUMABLE)
-# =========================================================
-
+# Retrieves existing point IDs from Qdrant for resumable ingestion
 def existing_ids_in_qdrant(point_ids: List[str]) -> set[str]:
-    """
-    Bulk check which point IDs already exist in Qdrant.
-    point_ids MUST be valid Qdrant IDs (UUID strings or unsigned ints).
-    """
     if not point_ids:
         return set()
     found = qdrant.retrieve(
@@ -247,14 +194,15 @@ def existing_ids_in_qdrant(point_ids: List[str]) -> set[str]:
     )
     return {str(p.id) for p in found}
 
+# Ingests a review file into Qdrant with batching and duplication protection
 def ingest_file(csv_path: str, source_name: str) -> int:
     if not os.path.exists(csv_path):
-        print(f"ℹ️ File not found (skipping): {csv_path}")
+        print(f"File not found (skipping): {csv_path}")
         return 0
 
     df = pd.read_csv(csv_path)
     if df.empty:
-        print(f"ℹ️ Empty file (skipping): {csv_path}")
+        print(f"Empty file (skipping): {csv_path}")
         return 0
 
     buffer_texts: List[str] = []
@@ -267,7 +215,6 @@ def ingest_file(csv_path: str, source_name: str) -> int:
         if not buffer_texts:
             return
 
-        # ✅ Skip reviews already stored (so reruns don't re-embed)
         if SKIP_EXISTING_IN_QDRANT:
             point_ids = [p["point_id"] for p in buffer_payloads]
             found = existing_ids_in_qdrant(point_ids)
@@ -294,7 +241,6 @@ def ingest_file(csv_path: str, source_name: str) -> int:
             for p, v in zip(buffer_payloads, vectors)
         ]
 
-        # ✅ Chunk upserts to avoid 32MB JSON limit
         for i in range(0, len(points), UPSERT_CHUNK):
             qdrant.upsert(collection_name=COLLECTION_NAME, points=points[i:i + UPSERT_CHUNK])
 
@@ -314,12 +260,10 @@ def ingest_file(csv_path: str, source_name: str) -> int:
             flush()
 
     flush()
-    print(f"✅ {source_name}: inserted={inserted}, skipped_existing={skipped}")
+    print(f"{source_name}: inserted={inserted}, skipped_existing={skipped}")
     return inserted
 
-
 if __name__ == "__main__":
-    # Create collection once (vector size comes from the model)
     sample_vec = embed_texts_retry(["test"])[0]
     ensure_collection(vector_size=len(sample_vec))
 

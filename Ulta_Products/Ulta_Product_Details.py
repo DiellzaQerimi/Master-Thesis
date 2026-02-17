@@ -7,8 +7,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-
 seen_ids = set()
+
+# Safely retrieves text from a single element, returning a default if not found
 def safe_get_text(driver, by, selector, default=""):
     try:
         return driver.find_element(by, selector).text.strip()
@@ -17,6 +18,7 @@ def safe_get_text(driver, by, selector, default=""):
     except Exception:
         return default
 
+# Expands an accordion section by its aria-label and returns the extracted content text
 def expand_section_and_get_text(driver, section_title):
     try:
         # Find the button using aria-label
@@ -42,9 +44,7 @@ def expand_section_and_get_text(driver, section_title):
         print(f"Could not get section '{section_title}': {e}")
         return ""
 
-
-
-
+# Scrapes structured product fields from an Ulta product page and returns them as a dictionary
 def scrape_product(driver, url, product_id):
     driver.get(url)
     time.sleep(2)
@@ -53,16 +53,16 @@ def scrape_product(driver, url, product_id):
         "product_id": product_id,
         "brand": "",
         "product": "",
-        #"category": "",
-        #"subcategory": "",
-        #"price": "",
-        #"size": "",
-        #"image": "",
-        #"no_of_reviews": "",
+        "category": "",
+        "subcategory": "",
+        "price": "",
+        "size": "",
+        "image": "",
+        "no_of_reviews": "",
         "description": "",
-        #"about_the_product": "",
-        #"ingredients": "",
-        #"how_to_use": ""
+        "about_the_product": "",
+        "ingredients": "",
+        "how_to_use": ""
     }
 
     try:
@@ -88,7 +88,6 @@ def scrape_product(driver, url, product_id):
         except Exception:
             data["price"] = ProductPricing.find_element(By.CSS_SELECTOR, 'span.Text-ds.Text-ds--body-3.Text-ds--left.Text-ds--neutral-600.Text-ds--line-through').text.strip()
 
-        
         try:
             variant = driver.find_element(By.CSS_SELECTOR, 'div.ProductVariant')
             dimensions = variant.find_elements(By.CSS_SELECTOR, 'div.ProductDimension')
@@ -108,21 +107,16 @@ def scrape_product(driver, url, product_id):
 
         data["no_of_reviews"] = safe_get_text(driver, By.CSS_SELECTOR, "a[href='#reviews'] span.pal-c-Link__label span")
 
-        # About the Product
         data["about_the_product"] = expand_section_and_get_text(driver, "Details")
-        # Ingredients
         data["ingredients"] = expand_section_and_get_text(driver, "Ingredients")
-        #How To Use
         data["how_to_use"] = expand_section_and_get_text(driver, "How To Use")
-
-        
 
     except Exception as e:
         print(f"Error scraping {url}: {e}")
 
     return data
 
-# Main run
+# Reads product IDs and URLs from the input CSV, scrapes each product page, and writes results to an output CSV
 input_file = "Data/Ulta_Products.csv"
 output_file = "Ulta_Product_Details.csv"
 
@@ -144,7 +138,7 @@ with open(input_file, newline='', encoding='utf-8') as csvfile:
 
 driver.quit()
 
-# Save to CSV
+# Saves the scraped product details into a structured CSV file
 with open(output_file, mode='w', newline='', encoding='utf-8-sig') as csvfile:
     fieldnames = [
         "product_id", "brand", "product", "category", "subcategory",

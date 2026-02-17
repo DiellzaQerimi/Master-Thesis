@@ -1,14 +1,14 @@
 import re
 import pandas as pd
 
-# ---- Load CSV File ----
+# Loads raw Ulta product details dataset and defines the main text column used for extraction
 df = pd.read_csv("Ulta_Products/Ulta_Product_Details.csv", low_memory=False)
 text_col = "about_the_product"
 
-# ---- Constants ----
+# Conversion constant used for size standardization (mL to oz)
 ML_PER_OZ = 29.5735295625
 
-# ---- Standardize Sizes ----
+# Converts size representations into standardized "oz / mL" format where possible
 def standardize_size(s):
     if not isinstance(s, str):
         return s
@@ -27,7 +27,7 @@ def standardize_size(s):
 
     return f"{oz:.2f} oz / {ml:.0f} mL" if (ml is not None and oz is not None) else t
 
-#---- Text Extraction Functions ----
+# Extracts text after a start header until a stop header and normalizes whitespace and duplicates
 def clean_text_block(text, start_pat, stop_pat):
     """
     Extract text after a start header until a stop header.
@@ -50,7 +50,6 @@ def clean_text_block(text, start_pat, stop_pat):
     if not hits:
         return pd.NA
 
-    # De-dup, preserve order
     seen, out = set(), []
     for h in hits:
         k = h.casefold()
@@ -60,7 +59,7 @@ def clean_text_block(text, start_pat, stop_pat):
 
     return ' '.join(out)
 
-# Description block
+# Extracts the main description block from the about_the_product text
 df['description'] = df[text_col].apply(
     lambda x: clean_text_block(
         x,
@@ -73,7 +72,7 @@ df['description'] = df[text_col].apply(
     )
 )
 
-# Skin Type extraction
+# Extracts and normalizes skin type mentions from product text
 def get_skin_type(text):
     if not isinstance(text, str) or not text.strip():
         return pd.NA
@@ -117,7 +116,7 @@ def get_skin_type(text):
 
     return val
 
-# Skin Concerns extraction
+# Pattern used to identify skin concern mentions inside product text
 concern_pat = re.compile(
     r"\b("
     r"fine\s+lines?\s*(?:and|&)?\s*wrinkles?|wrinkles?|fine[\s-]+line[s]?|"
@@ -131,7 +130,7 @@ concern_pat = re.compile(
     re.IGNORECASE
 )
 
-# Extract and standardize skin concerns
+# Extracts and normalizes skin concerns mentioned in product text
 def get_skin_concerns(text):
     """Extract and standardize skin concerns from product descriptions."""
     if not isinstance(text, str) or not text.strip():
@@ -141,7 +140,6 @@ def get_skin_concerns(text):
     for m in concern_pat.finditer(text):
         v = m.group(1).lower()
 
-        # Normalize terms
         if v.startswith('fine line') or v.startswith('wrinkle'):
             v = 'fine lines & wrinkles'
         elif v in ('blemish', 'acne'):
@@ -173,7 +171,7 @@ def get_skin_concerns(text):
     
     return ', '.join(found) if found else pd.NA
 
-# Formulated Without / Free Of extraction
+# Extracts "formulated without" / "free of" information from product text
 def get_formulated_without(text):
     if not isinstance(text, str) or not text.strip():
         return pd.NA
@@ -191,7 +189,6 @@ def get_formulated_without(text):
         matches = pattern.findall(text)
 
         if matches:
-            # Normalize to the clean hyphenated form: X-Free
             normalized = sorted(set(f"{m.title()}-Free" for m in matches))
             val = ", ".join(normalized)
         else:
@@ -199,7 +196,7 @@ def get_formulated_without(text):
 
     return val
 
-# Important Ingredients extraction
+# Extracts key ingredients section and falls back to Features section if needed
 def extract_ingredients(text):
     val = clean_text_block(
         text,
@@ -214,8 +211,7 @@ def extract_ingredients(text):
         )
     return val
 
-
-# ---- Apply Cleaning Functions ----
+# Applies size standardization and text extraction functions to produce cleaned feature columns
 df['size'] = df['size'].map(standardize_size)
 df['important_ingredients'] = df[text_col].apply(extract_ingredients)
 df['skin_type'] = df[text_col].apply(get_skin_type)
@@ -224,7 +220,7 @@ df['free_of'] = df[text_col].apply(get_formulated_without)
 df['free_of'] = df['free_of'].str.replace(r' / ', ', ', regex=True)
 df['source'] = "Ulta Beauty"
 
-# Sanity check for the product in user's snippet
+# Builds a small result sample for one product_id to validate extraction output
 id_ = "pimprod2035463"
 result = {
     "description": df.loc[df['product_id'] == id_, 'description'].head(3).tolist(),
@@ -235,7 +231,7 @@ result = {
     "important_ingredients": df.loc[df['product_id'] == id_, 'important_ingredients'].head(3).tolist(),
 }
 
-# Save cleaned
+# Saves the cleaned dataset to CSV when needed
 # out_path = "Ulta_Products/Ulta_Product_Details_Cleaned.csv"
 # df.to_csv(out_path, index=False, encoding="utf-8-sig")
 print(result)

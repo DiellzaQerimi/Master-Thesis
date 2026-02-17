@@ -7,6 +7,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
+# Closes the initial modal popup if it appears
 def dismiss_popup(driver):
     try:
         WebDriverWait(driver, 5).until(
@@ -15,6 +16,7 @@ def dismiss_popup(driver):
     except TimeoutException:
         pass
 
+# Closes the sign-in prompt popup if it appears
 def dismiss_sign_in(driver):
     try:
         WebDriverWait(driver, 5).until(
@@ -23,6 +25,7 @@ def dismiss_sign_in(driver):
     except TimeoutException:
         pass
 
+# Safely retrieves text from a single element, returning a default if not found
 def safe_get_text(driver, by, selector, default=""):
     try:
         return driver.find_element(by, selector).text.strip()
@@ -31,6 +34,7 @@ def safe_get_text(driver, by, selector, default=""):
     except Exception:
         return default
 
+# Expands a collapsible section by title and returns its visible text content
 def expand_and_get_text(driver, section_title, content_id):
     try:
         header = WebDriverWait(driver, 10).until(
@@ -48,6 +52,7 @@ def expand_and_get_text(driver, section_title, content_id):
     except Exception:
         return ""
 
+# Scrapes structured product fields from a Sephora product page and returns them as a dictionary
 def scrape_product(driver, url, product_id):
     driver.get(url)
     time.sleep(2)
@@ -114,7 +119,7 @@ def scrape_product(driver, url, product_id):
 
         data["no_of_reviews"] = safe_get_text(driver, By.CSS_SELECTOR, 'a.css-137xvot')
 
-        # Optional "Show more"
+        # Expands the main content section if a "Show more" button is present
         try:
             show_more = driver.find_element(By.XPATH, '//button[text()="Show more"]')
             driver.execute_script("arguments[0].scrollIntoView();", show_more)
@@ -124,7 +129,7 @@ def scrape_product(driver, url, product_id):
         except NoSuchElementException:
             pass
 
-        # About the Product
+        # Extracts the "About the Product" text by collecting sibling blocks until the next section header
         try:
             about_header = driver.find_element(By.XPATH, '//h2[contains(text(), "About the Product")]')
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", about_header)
@@ -155,7 +160,7 @@ def scrape_product(driver, url, product_id):
 
     return data
 
-# Main run
+# Reads product IDs and URLs from the input CSV, scrapes each product page, and writes results to an output CSV
 input_file = "Sephora_Products.csv"
 output_file = "Sephora_Product_Details.csv"
 
@@ -173,7 +178,7 @@ with open(input_file, newline='', encoding='utf-8') as csvfile:
 
 driver.quit()
 
-# Save to CSV
+# Saves the scraped product details into a structured CSV file
 with open(output_file, mode='w', newline='', encoding='utf-8') as csvfile:
     fieldnames = [
         "product_id", "brand", "product", "category", "subcategory",

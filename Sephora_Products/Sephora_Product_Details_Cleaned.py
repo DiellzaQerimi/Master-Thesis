@@ -1,24 +1,24 @@
 import re
 import pandas as pd
 
-# ---- Constants ----
+# Conversion constant used for size standardization (mL to oz)
 ML_PER_OZ = 29.5735295625
+
+# Main text column containing product information blocks
 text_col = 'about_the_product'
 
-# ---- Utilities ----
 def drop_if_contains(df, col, pattern):
-    """Drop rows where `col` contains a given pattern (case-insensitive)."""
+    # Removes rows where the specified column contains a given pattern
     return df.drop(df[df[col].str.contains(pattern, case=False, na=False)].index)
 
 def clean_column(df, col, patterns):
-    """Apply multiple regex replacements on a column."""
+    # Applies multiple regex-based cleaning rules to a specific column
     for pat, repl in patterns:
         df[col] = df[col].replace(pat, repl, regex=True)
     return df
 
-
 def clean_text_block(text, start_pat, stop_pat):
-    """Extract text between start and stop headers."""
+    # Extracts structured text sections between defined start and stop headers
     if not isinstance(text, str) or not text.strip():
         return pd.NA
 
@@ -45,19 +45,17 @@ def clean_text_block(text, start_pat, stop_pat):
 
     return ' '.join(out)
 
-
-# ---- Load CSV File ----
+# Load raw Sephora product details dataset
 df = pd.read_csv("Sephora_Products/Sephora_Product_Details.csv")
 
-# ---- Cleaning ----
+# Remove unwanted rows and normalize newline formatting
 df = drop_if_contains(df, 'product', "perfume")
 df = drop_if_contains(df, 'product', "product")
 df = df[df['product_id'].astype(str).str.lower() != 'product_id']
 df = df.replace(r'\n', ' ', regex=True)
 
-
-# ---- Size Standardization ----
 def standardize_size(s):
+    # Converts size representations into standardized "oz / mL" format
     if not isinstance(s, str):
         return s
     t = re.sub(r'(?i)^\s*size\b\s*:?\s*', '', s.strip())
@@ -75,7 +73,7 @@ def standardize_size(s):
 
     return f"{oz:.2f} oz / {ml:.0f} mL" if ml and oz else t
 
-# ---- Description ----
+# Extract product description section from text column
 df['description'] = df[text_col].apply(
     lambda x: clean_text_block(
         x,
@@ -84,7 +82,7 @@ df['description'] = df[text_col].apply(
     )
 )
 
-# ---- Important Ingredients extraction ----
+# Extract highlighted / important ingredients section
 df['important_ingredients'] = df[text_col].apply(
     lambda x: clean_text_block(
         x,
@@ -93,10 +91,11 @@ df['important_ingredients'] = df[text_col].apply(
     )
 )
 
-# ---- Skin Types ----
+# Pattern used to identify skin types inside product text
 type_pat = re.compile(r'\b(oily|dry|combination|combo|normal)\b', re.I)
 
 def get_skin_types(text):
+    # Detects and normalizes skin type mentions from text
     if not isinstance(text, str) or not text.strip():
         return pd.NA
 
@@ -104,24 +103,19 @@ def get_skin_types(text):
 
     for m in type_pat.finditer(text):
         v = m.group(1).lower()
-
-        # normalize combination
         if v in ("combo", "combination"):
             v = "combination"
-
         found.add(v)
 
     if not found:
         return pd.NA
 
-    # otherwise return the found ones
     return ", ".join(sorted([x.capitalize() for x in found]))
 
-
-# ---- Skin Types Application ----
+# Apply skin type extraction
 df['skin_type'] = df[text_col].apply(get_skin_types)
 
-# ---- Skin Concerns ----
+# Extract skincare concerns section
 df['skin_concerns'] = df[text_col].apply(
     lambda x: clean_text_block(
         x,
@@ -130,12 +124,13 @@ df['skin_concerns'] = df[text_col].apply(
     )
 )
 
-# ---- Size Standardization Application ----
+# Apply size standardization
 df['size'] = df['size'].map(standardize_size)
-# ---- Skin Concerns Normalization ----
+
+# Normalize skin concerns formatting
 df['skin_concerns'] = df['skin_concerns'].str.title()
 
-# ---- Free Of Extraction ----
+# Extract "free of" / formulated without section
 df['free_of'] = df[text_col].apply(
     lambda x: clean_text_block(
         x,
@@ -144,32 +139,37 @@ df['free_of'] = df[text_col].apply(
     )
 )
 
-# no_of_reviews Cleaning
+# Clean no_of_reviews column
 df = clean_column(df, 'no_of_reviews', [
     (r'(?i)^\s*write\s+a\s+review\s*$', pd.NA)
 ])
 
-# how_to_use Cleaning
+# Clean how_to_use column
 df = clean_column(df, 'how_to_use', [
     (r'(?i)suggested\s+usage\s*:', ''),  
     ('•', '-')  
 ])
 
-# description Cleaning
+# Clean description column
 df = clean_column(df, 'description', [
     (r'(?i)\bwhat\s+it\s+is\s+formulated\s+to\s+do\s*:\s*', '')
 ])
 
-# skin_concerns Cleaning
+# Clean skin_concerns column
 df = clean_column(df, 'skin_concerns', [
-    (r'-', '')  # remove stray dashes
+    (r'-', '')
 ])
 
+# Add source identifier column
 df['source'] = "Sephora"
 
-pd.set_option('display.max_colwidth', None)  # don’t cut off long text
+# Ensure full text display in console
+pd.set_option('display.max_colwidth', None)
+
+# Save cleaned dataset to new CSV file
 df.to_csv("Sephora_Products/Sephora_Product_Details_Cleaned.csv", index=False, encoding="utf-8-sig")
 
+# Test extraction for a specific product ID
 id_ = "P510508"
 result = {
     "description": df.loc[df['product_id'] == id_, 'description'].head(3).tolist(),

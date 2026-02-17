@@ -1,0 +1,41 @@
+query_id,query_text,precision_at_k,sum_relevance,hit_at_k,mrr_at_k,ndcg_at_k
+1,"I have oily, acne-prone skin with frequent breakouts around my chin and jaw. I’m looking for a gentle cleanser that contains salicylic acid and won’t dry out my skin.",0.9,4.5,1,1.0,0.9920466006454153
+2,"My skin is very dry and sensitive, especially in winter. I need a moisturizer that helps repair the skin barrier and is ffree of parabens above 60$.",1.0,5.0,1,1.0,1.0
+3,I struggle with hyperpigmentation and dark spots after acne. I want a serum that helps brighten my skin and improve texture that contains Niacinamide.,1.0,5.0,1,1.0,1.0
+4,I’m in my late 20s and want to start using anti-aging products that help with fine lines but won’t irritate my skin.,1.0,5.0,1,1.0,1.0
+5,My skin gets oily during the day but feels tight after washing. I want a sunscreen that hydrates while controlling oil under 50$.,1.0,5.0,1,1.0,1.0
+6,I have rosacea-prone skin and experience frequent redness. I need a calming moisturizer with soothing ingredients like centella or allantoin.,0.8,4.0,1,1.0,0.8792872118748392
+7,My skin feels rough and dull. I’m looking for a gentle exfoliating product with PHA suitable for sensitive skin.,1.0,5.0,1,1.0,1.0
+8,I have dry under-eyes and fine lines. Recommend a hydrating eye cream that improves elasticity.,1.0,5.0,1,1.0,1.0
+9,My pores look enlarged and my skin gets shiny quickly. I want a serum that helps minimize pores.,1.0,5.0,1,1.0,1.0
+10,My skin reacts easily to fragrance. I need a fragrance-free cleanser for daily use.,0.9,4.5,1,1.0,0.8887223390544889
+11,Masks for oily and acne-prone skin,0.9,4.5,1,1.0,0.9794653631264242
+12,Oil cleanser for removing makeup and sunscreen,0.8,4.0,1,1.0,1.0
+13,Eye serum or eye cream for dark circles and fine lines,1.0,5.0,1,1.0,1.0
+14,Lightweight moisturizer for combination skin from Estee Lauder,0.9,4.5,1,1.0,1.0
+15,Night cream for dry skin with anti-aging benefits,1.0,5.0,1,1.0,1.0
+16,Hydrating facial mist for dry skin,1.0,5.0,1,1.0,1.0
+17,Retinol serum for beginners,0.9,4.5,1,1.0,0.9557034395662896
+18,Makeup removing balm for sensitive skin,0.9,4.5,1,1.0,1.0
+19,Sleeping mask for dehydrated skin,1.0,5.0,1,1.0,1.0
+20,Face oil for nighttime use,0.9,4.5,1,1.0,0.9794653631264242
+21,face sunscreen with vitamin E,0.9,4.5,1,1.0,0.9920466006454153
+22,toner to hydrate dry skin,1.0,5.0,1,1.0,1.0
+23,brightening serum,1.0,5.0,1,1.0,1.0
+24,barrier repair cream,1.0,5.0,1,1.0,1.0
+25,exfoliators for oily skin,1.0,5.0,1,1.0,1.0
+26,fragrance-free face wash,0.7,3.5,1,0.5,0.7386712923485247
+27,retinol night serum,1.0,5.0,1,1.0,1.0
+28,hydrating sleeping mask,1.0,5.0,1,1.0,1.0
+29,calming face cream,0.9,4.5,1,1.0,0.9794653631264242
+30,makeup removing balm,0.9,4.5,1,1.0,0.9920466006454153
+31,My skin gets very red after washing. Recommend a serum or toner to reduce redness.,0.9,4.5,1,1.0,1.0
+32,Need an affordable lightweight moisturizer for oily skin from clinique.,0.7,3.5,1,1.0,1.0
+33,I want a spot treatment for sudden acne breakouts under 50$?,1.0,5.0,1,1.0,1.0
+34,My skin breaks out easily but feels dry sometimes. Recommend a moisturizer that hydrates without clogging pores with Salicylic Acid.,0.8,4.0,1,1.0,1.0
+35,Recommend a face serum for acne and blemishes from Paulas Choice.,0.9,4.5,1,1.0,0.9794653631264242
+36,My skin feels tight and uncomfortable after cleansing. Recommend a gentle daily cleanser.,1.0,5.0,1,1.0,1.0
+37,I want to start using retinol but I’m afraid of irritation. What beginner-friendly option should I use?,0.9,4.5,1,1.0,0.9794653631264242
+38,My makeup doesn’t come off completely with regular cleanser. Recommend a balm or oil cleanser.,0.9,4.5,1,1.0,1.0
+39,My skin looks dull lately. I want something to restore glow without irritating my skin.,1.0,5.0,1,1.0,1.0
+40,I need a nourishing face oil for dry skin that I can use at night.,0.8,4.0,1,1.0,1.0

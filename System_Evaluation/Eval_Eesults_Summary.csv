@@ -1,0 +1,2 @@
+K,num_queries,mean_precision_at_k,mean_hit_at_k,mean_mrr_at_k,mean_ndcg_at_k
+5,40,0.93,1.0,0.9875,0.9833962725103127

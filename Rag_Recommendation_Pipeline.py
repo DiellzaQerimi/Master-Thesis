@@ -1,8 +1,9 @@
-# SearchQuery.py
 import os
 import re
+import csv
 import json
 import unicodedata
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 from dotenv import load_dotenv
@@ -10,9 +11,8 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, FieldCondition, MatchValue
 
-# =========================================================
+
 # CONFIG
-# =========================================================
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -31,7 +31,7 @@ TOP_DEEP_PRODUCTS = 3
 REVIEWS_STAGE_A = 20
 REVIEWS_STAGE_B = 50
 
-# ---- payload keys (product_list) ----
+# payload keys (product_list) 
 PRODUCT_ID_KEY = "product_id"
 BRAND_DISPLAY_KEY = "brand_name"
 BRAND_NORM_KEY = "norm_brand"
@@ -48,7 +48,7 @@ DESCRIPTION_KEY = "description"
 IMPORTANT_INGREDIENTS_KEY = "important_ingredients"
 HOW_TO_USE_KEY = "how_to_use"
 
-# ---- payload keys (product_reviews) ----
+#  payload keys (product_reviews) 
 REVIEW_JOIN_KEY = "brand_product_id"  # join field in reviews payload
 REVIEW_TEXT_KEY = "review_text"
 REVIEW_ID_KEY = "review_id"
@@ -56,9 +56,109 @@ REVIEW_RATING_KEY = "rating"
 REVIEW_DATE_KEY = "review_date"
 
 
-# =========================================================
-# HELPERS
-# =========================================================
+# CSV LOGGER (FOR MANUAL EVALUATION)
+CSV_PATH = "Product_Recommendation_List.csv"
+
+
+def log_recommendations_to_csv(
+    query_id: int,
+    query_text: str,
+    stage_a: List[Dict[str, Any]],
+    stage_b: List[Dict[str, Any]],
+    extracted_brand_norm: Optional[str],
+    used_brand_filter: bool,
+    price_intent: Optional[Dict[str, float]],
+) -> None:
+    """
+    Appends recommendations to a CSV file.
+    - One row per recommendation
+    - Logs top 5 from Stage A and all Stage B (usually top 3)
+    """
+    file_exists = os.path.isfile(CSV_PATH)
+
+    with open(CSV_PATH, "a", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+
+        if not file_exists:
+            writer.writerow(
+                [
+                    "run_timestamp_utc",
+                    "query_id",
+                    "query_text",
+                    "rank",
+                    "stage",
+                    "product_id",
+                    "brand",
+                    "product_name",
+                    "category",
+                    "subcategory",
+                    "price_usd",
+                    "final_score",
+                    "embedding_score",
+                    "review_avg",
+                    "reviews_used",
+                    "extracted_brand_norm",
+                    "used_brand_filter",
+                    "price_intent_json",
+                ]
+            )
+
+        ts = datetime.utcnow().isoformat()
+        price_intent_json = json.dumps(price_intent) if price_intent else ""
+
+        # Stage A (top 5)
+        for i, p in enumerate(stage_a[:5], 1):
+            writer.writerow(
+                [
+                    ts,
+                    query_id,
+                    query_text,
+                    i,
+                    "stage_a",
+                    p.get("product_id"),
+                    p.get("brand"),
+                    p.get("name"),
+                    p.get("category"),
+                    p.get("subcategory"),
+                    p.get("price"),
+                    round(float(p.get("final_score", 0.0) or 0.0), 6),
+                    round(float(p.get("score", 0.0) or 0.0), 6),
+                    round(float(p.get("review_avg", 0.0) or 0.0), 6),
+                    int(p.get("reviews_used", 0) or 0),
+                    extracted_brand_norm or "",
+                    "1" if used_brand_filter else "0",
+                    price_intent_json,
+                ]
+            )
+
+        # Stage B (top deep products, usually 3)
+        for i, p in enumerate(stage_b, 1):
+            writer.writerow(
+                [
+                    ts,
+                    query_id,
+                    query_text,
+                    i,
+                    "stage_b",
+                    p.get("product_id"),
+                    p.get("brand"),
+                    p.get("name"),
+                    p.get("category"),
+                    p.get("subcategory"),
+                    p.get("price"),
+                    round(float(p.get("final_score", 0.0) or 0.0), 6),
+                    round(float(p.get("score", 0.0) or 0.0), 6),
+                    round(float(p.get("review_avg", 0.0) or 0.0), 6),
+                    int(p.get("reviews_used", 0) or 0),
+                    extracted_brand_norm or "",
+                    "1" if used_brand_filter else "0",
+                    price_intent_json,
+                ]
+            )
+
+
+
+# Helper functions for product search, review retrieval, ranking, and insights generation
 def embed(text: str) -> List[float]:
     r = client.embeddings.create(model=EMBED_MODEL, input=text)
     return r.data[0].embedding
@@ -155,6 +255,12 @@ def resolve_price_intent(q: str) -> Optional[Dict[str, float]]:
         return {"lte": 50.0}
     if "luxury" in q or "high end" in q or "premium" in q or "expensive" in q:
         return {"gte": 50.0}
+
+    # Soft price language (you mentioned: "not too expensive")
+    # For now we treat it as a soft cap to support your tests.
+    if "not too expensive" in q or "prefer not too expensive" in q or "not expensive" in q:
+        return {"lte": 30.0}
+
     return None
 
 
@@ -173,9 +279,8 @@ def apply_price_filter(products: List[Dict[str, Any]], price_intent: Dict[str, f
     return out
 
 
-# =========================================================
+
 # PRODUCT SEARCH
-# =========================================================
 def query_products(user_query: str, brand_norm: Optional[str]) -> List[Dict[str, Any]]:
     qvec = embed(user_query)
 
@@ -195,28 +300,29 @@ def query_products(user_query: str, brand_norm: Optional[str]) -> List[Dict[str,
     products = []
     for pt in res.points:
         p = pt.payload or {}
-        products.append({
-            "product_id": p.get(PRODUCT_ID_KEY),
-            "brand": p.get(BRAND_DISPLAY_KEY),
-            "name": p.get(NAME_KEY),
-            "category": p.get(CATEGORY_KEY),
-            "subcategory": p.get(SUBCATEGORY_KEY),
-            "price": p.get(PRICE_KEY),
-            "size": p.get(SIZE_KEY),
-            "image_url": p.get(IMAGE_URL_KEY),
-            "skin_type": p.get(SKIN_TYPE_KEY),
-            "skin_concerns": p.get(SKIN_CONCERN_KEY),
-            "description": p.get(DESCRIPTION_KEY),
-            "important_ingredients": p.get(IMPORTANT_INGREDIENTS_KEY),
-            "how_to_use": p.get(HOW_TO_USE_KEY),
-            "score": float(pt.score),
-        })
+        products.append(
+            {
+                "product_id": p.get(PRODUCT_ID_KEY),
+                "brand": p.get(BRAND_DISPLAY_KEY),
+                "name": p.get(NAME_KEY),
+                "category": p.get(CATEGORY_KEY),
+                "subcategory": p.get(SUBCATEGORY_KEY),
+                "price": p.get(PRICE_KEY),
+                "size": p.get(SIZE_KEY),
+                "image_url": p.get(IMAGE_URL_KEY),
+                "skin_type": p.get(SKIN_TYPE_KEY),
+                "skin_concerns": p.get(SKIN_CONCERN_KEY),
+                "description": p.get(DESCRIPTION_KEY),
+                "important_ingredients": p.get(IMPORTANT_INGREDIENTS_KEY),
+                "how_to_use": p.get(HOW_TO_USE_KEY),
+                "score": float(pt.score),
+            }
+        )
     return products
 
 
-# =========================================================
-# REVIEW SEARCH (JOIN KEY)
-# =========================================================
+
+# Review retrieval and scoring (for ranking and insights generation)
 def query_reviews_for_product(qvec: List[float], product_id: str, limit: int) -> List[Dict[str, Any]]:
     if not product_id:
         return []
@@ -235,13 +341,15 @@ def query_reviews_for_product(qvec: List[float], product_id: str, limit: int) ->
     reviews = []
     for pt in res.points:
         p = pt.payload or {}
-        reviews.append({
-            "review_id": p.get(REVIEW_ID_KEY),
-            "review_text": p.get(REVIEW_TEXT_KEY),
-            "rating": p.get(REVIEW_RATING_KEY),
-            "review_date": p.get(REVIEW_DATE_KEY),
-            "score": float(pt.score),
-        })
+        reviews.append(
+            {
+                "review_id": p.get(REVIEW_ID_KEY),
+                "review_text": p.get(REVIEW_TEXT_KEY),
+                "rating": p.get(REVIEW_RATING_KEY),
+                "review_date": p.get(REVIEW_DATE_KEY),
+                "score": float(pt.score),
+            }
+        )
     return reviews
 
 
@@ -249,10 +357,10 @@ def avg_review_score(reviews: List[Dict[str, Any]]) -> float:
     return sum(r.get("score", 0.0) for r in reviews) / len(reviews) if reviews else 0.0
 
 
-# =========================================================
+
 # ON-DEMAND REVIEW INSIGHTS (summary + pros/cons)
 # Uses ONLY already-retrieved reviews passed from UI.
-# =========================================================
+
 def make_review_insights(product: Dict[str, Any], reviews: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Generates review_summary + pros_summary + cons_summary
@@ -296,11 +404,9 @@ Rules:
 - State the negative plainly and neutrally, without mentioning how often it appears.
 - If multiple different negatives appear, summarize them briefly in one sentence.
 - If no negative experience is mentioned at all, write: "No notable drawbacks were reported."
-
-
 """
 
-    # ---------- Responses API ----------
+    #  Responses API 
     try:
         resp = client.responses.create(
             model=REVIEW_SUMMARY_MODEL,
@@ -317,11 +423,10 @@ Rules:
         return {
             "review_summary": str(data.get("review_summary", "")).strip(),
             "pros_summary": str(data.get("pros_summary", "")).strip(),
-            "cons_summary": str(data.get("cons_summary", "")).strip()
-                or "Not commonly mentioned.",
+            "cons_summary": str(data.get("cons_summary", "")).strip() or "Not commonly mentioned.",
         }
 
-    # ---------- Chat Completions fallback ----------
+    #  Chat Completions fallback 
     except Exception:
         try:
             resp = client.chat.completions.create(
@@ -338,8 +443,7 @@ Rules:
             return {
                 "review_summary": str(data.get("review_summary", "")).strip(),
                 "pros_summary": str(data.get("pros_summary", "")).strip(),
-                "cons_summary": str(data.get("cons_summary", "")).strip()
-                    or "Not commonly mentioned.",
+                "cons_summary": str(data.get("cons_summary", "")).strip() or "Not commonly mentioned.",
             }
 
         except Exception:
@@ -350,10 +454,10 @@ Rules:
             }
 
 
-# =========================================================
+
 # TWO-STAGE RANKING
 # Stage B stores all_reviews so UI can generate insights later.
-# =========================================================
+
 def rank_products_two_stage(user_query: str, products: List[Dict[str, Any]]) -> Dict[str, Any]:
     qvec = embed(user_query)
     candidates = products[:TOP_N_PRODUCTS]
@@ -364,12 +468,14 @@ def rank_products_two_stage(user_query: str, products: List[Dict[str, Any]]) -> 
         avg20 = avg_review_score(reviews20)
         final20 = 0.6 * p["score"] + 0.4 * avg20
 
-        stage_a.append({
-            **p,
-            "review_avg": avg20,
-            "final_score": final20,
-            "reviews_used": REVIEWS_STAGE_A,
-        })
+        stage_a.append(
+            {
+                **p,
+                "review_avg": avg20,
+                "final_score": final20,
+                "reviews_used": REVIEWS_STAGE_A,
+            }
+        )
 
     stage_a.sort(key=lambda x: x["final_score"], reverse=True)
 
@@ -379,13 +485,15 @@ def rank_products_two_stage(user_query: str, products: List[Dict[str, Any]]) -> 
         avg50 = avg_review_score(reviews50)
         final50 = 0.55 * p["score"] + 0.45 * avg50
 
-        stage_b.append({
-            **p,
-            "review_avg": avg50,
-            "final_score": final50,
-            "reviews_used": REVIEWS_STAGE_B,
-            "all_reviews": reviews50,  # ✅ keep for on-demand UI summarization
-        })
+        stage_b.append(
+            {
+                **p,
+                "review_avg": avg50,
+                "final_score": final50,
+                "reviews_used": REVIEWS_STAGE_B,
+                "all_reviews": reviews50,  #  keep for on-demand UI summarization
+            }
+        )
 
     stage_b.sort(key=lambda x: x["final_score"], reverse=True)
 
@@ -398,10 +506,9 @@ def rank_products_two_stage(user_query: str, products: List[Dict[str, Any]]) -> 
     }
 
 
-# =========================================================
-# MAIN
-# =========================================================
-def recommend_top_20_products(user_query: str) -> Dict[str, Any]:
+
+# Main recommendation function (called from UI or CLI)
+def recommend_top_5_products(user_query: str, query_id: int = 0) -> Dict[str, Any]:
     brand_norm = extract_brand(user_query)
     price_intent = resolve_price_intent(user_query)
 
@@ -424,12 +531,26 @@ def recommend_top_20_products(user_query: str) -> Dict[str, Any]:
     if not rank_pack.get("best_product"):
         return {"message": "No products could be ranked (empty results)."}
 
+    #  CSV logging (top 5 stage A + all stage B)
+    try:
+        log_recommendations_to_csv(
+            query_id=query_id,
+            query_text=user_query,
+            stage_a=rank_pack["stage_a"],
+            stage_b=rank_pack["stage_b"],
+            extracted_brand_norm=brand_norm,
+            used_brand_filter=bool(brand_norm),
+            price_intent=price_intent,
+        )
+    except Exception as e:
+        # We do NOT break recommendations if logging fails
+        print(f"[WARN] CSV logging failed: {e}")
+
     return {
         # optional metadata (UI can show these if you want)
         "extracted_brand_norm": brand_norm,
         "used_brand_filter": bool(brand_norm),
         "price_intent": price_intent,
-
         "stage_a": rank_pack["stage_a"],
         "stage_b": rank_pack["stage_b"],
         "best_product": rank_pack["best_product"],
@@ -437,29 +558,84 @@ def recommend_top_20_products(user_query: str) -> Dict[str, Any]:
     }
 
 
-# =========================================================
-# CLI DEBUG
-# =========================================================
+
+# CLI BATCH TEST (RUN ONCE, EVALUATE LATER)
 if __name__ == "__main__":
-    queries = [
-        "luxury moisturizer for sensitive skin",
-        "cleanser from la roche posay under $30",
-        "drugstore cleanser for dry skin",
-    ]
 
-    for q in queries:
-        print("\n" + "=" * 90)
-        print("QUERY:", q)
+    test_queries = [
+        # --- Descriptive (10) ---
+        "I have oily, acne-prone skin with frequent breakouts around my chin and jaw. I’m looking for a gentle cleanser that contains salicylic acid and won’t dry out my skin.",
+        "My skin is very dry and sensitive, especially in winter. I need a moisturizer that helps repair the skin barrier and is free of parabens above 60$.",
+        "I struggle with hyperpigmentation and dark spots after acne. I want a serum that helps brighten my skin and improve texture that contains Niacinamide.",
+        "I’m in my late 20s and want to start using anti-aging products that help with fine lines but won’t irritate my skin.",
+        "My skin gets oily during the day but feels tight after washing. I want a sunscreen that hydrates while controlling oil under 50$.",
+        "I have rosacea-prone skin and experience frequent redness. I need a calming moisturizer with soothing ingredients like centella or allantoin.",
+        "My skin feels rough and dull. I’m looking for a gentle exfoliating product with PHA suitable for sensitive skin.",
+        "I have dry under-eyes and fine lines. Recommend a hydrating eye cream that improves elasticity.",
+        "My pores look enlarged and my skin gets shiny quickly. I want a serum that helps minimize pores.",
+        "My skin reacts easily to fragrance. I need a fragrance-free cleanser for daily use.",
 
-        out = recommend_top_20_products(q)
+
+
+        # # --- Medium (10) ---
+        "Masks for oily and acne-prone skin",
+        "Oil cleanser for removing makeup and sunscreen",
+        "Eye serum or eye cream for dark circles and fine lines",
+        "Lightweight moisturizer for combination skin from Estee Lauder",
+        "Night cream for dry skin with anti-aging benefits",
+        "Hydrating facial mist for dry skin",
+        "Retinol serum for beginners",
+        "Makeup removing balm for sensitive skin",
+        "Sleeping mask for dehydrated skin",
+        "Face oil for nighttime use",
+
+
+        # # --- Short (10) ---
+        "face sunscreen with vitamin E",
+        "toner to hydrate dry skin",
+        "brightening serum",
+        "barrier repair cream",
+        "exfoliators for oily skin",
+        "fragrance-free face wash",
+        "retinol night serum",
+        "hydrating sleeping mask",
+        "calming face cream",
+        "makeup removing balm",
+
+
+        # # --- Mixed / realistic (10) — CATEGORY SPECIFIED ---
+        "My skin gets very red after washing. Recommend a serum or toner to reduce redness.",
+        "Need an affordable lightweight moisturizer for oily skin from clinique.",
+        "I want a spot treatment for sudden acne breakouts under 50$?",
+        "My skin breaks out easily but feels dry sometimes. Recommend a moisturizer that hydrates without clogging pores with Salicylic Acid.",
+        "Recommend a face serum for acne and blemishes from Paulas Choice.",
+        "My skin feels tight and uncomfortable after cleansing. Recommend a gentle daily cleanser.",
+        "I want to start using retinol but I’m afraid of irritation. What beginner-friendly option should I use?",
+        "My makeup doesn’t come off completely with regular cleanser. Recommend a balm or oil cleanser.",
+        "My skin looks dull lately. I want something to restore glow without irritating my skin.",
+        "I need a nourishing face oil for dry skin that I can use at night.",
+
+        ]
+
+    print(f"\nWill write results to: {CSV_PATH}")
+    print("Running 40 queries...\n")
+
+    for idx, q in enumerate(test_queries, 1):
+        print("\n" + "=" * 100)
+        print(f"QUERY {idx}: {q}")
+
+        out = recommend_top_5_products(q, query_id=idx)
+
         if out.get("message"):
             print(out["message"])
             continue
 
-        print("\nTOP 3 (Stage B):")
-        for i, p in enumerate((out.get("stage_b") or [])[:3], 1):
-            print(f"{i}. {p.get('brand')} - {p.get('name')} | {p.get('price')} | final={p.get('final_score'):.4f}")
+        print("\nTOP 5 (Stage A):")
+        for i, p in enumerate(out["stage_a"][:5], 1):
+            print(f"{i}. {p.get('brand')} - {p.get('name')} | {p.get('price')}")
 
-        best = out["best_product"]
-        print("\nBEST PRODUCT:")
-        print(f"{best.get('brand')} - {best.get('name')} | {best.get('price')} | final={best.get('final_score'):.4f}")
+        print("\nTOP 3 (Stage B):")
+        for i, p in enumerate(out["stage_b"], 1):
+            print(f"{i}. {p.get('brand')} - {p.get('name')} | {p.get('price')}")
+
+    print("\nDone. All results are saved!")

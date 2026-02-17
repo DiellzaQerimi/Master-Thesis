@@ -9,7 +9,7 @@ from openai import OpenAI
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import VectorParams, Distance, PointStruct
 
-# ---------------- CONFIG ----------------
+# Defines input dataset, Qdrant collection name, embedding configuration, and column mappings
 PRODUCTS_CSV = "Full_Product_List.csv"
 COLLECTION_NAME = "product_list"
 
@@ -17,7 +17,6 @@ EMBED_MODEL = "text-embedding-3-small"
 EMBED_DIM = 1536
 BATCH_SIZE = 50
 
-# Column names
 BRAND_COL = "brand"
 PRODUCT_COL = "product"
 DESC_COL = "about_the_product"
@@ -25,13 +24,13 @@ BRND_COL = "brand"
 CAT_COL = "category"
 SUBCAT_COL = "subcategory"
 
-# ---------------- SETUP ----------------
+# Loads environment variables, initializes OpenAI client, and connects to local Qdrant instance
 load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 qdrant = QdrantClient("http://localhost:6333")
 
-# ---------------- CREATE COLLECTION ----------------
-qdrant.recreate_collection(
+# Creates the Qdrant collection with cosine distance if it does not already exist
+qdrant.create_collection(
     collection_name=COLLECTION_NAME,
     vectors_config=VectorParams(
         size=EMBED_DIM,
@@ -39,41 +38,29 @@ qdrant.recreate_collection(
     )
 )
 
-# ---------------- LOAD DATA ----------------
+# Loads the full product dataset used for embedding and indexing
 df = pd.read_csv(PRODUCTS_CSV, low_memory=False)
 
-# ---------------- ID HELPERS ----------------
+# Builds a stable product identifier using brand + product fields
 def build_product_id(row):
-    # space is intentional and safe
     return f"{row[BRAND_COL].strip().lower()} {row[PRODUCT_COL].strip().lower()}"
 
+# Converts a product identifier into a deterministic UUID for Qdrant point IDs
 def pid_to_uuid(pid: str) -> str:
-    # deterministic, Qdrant-safe
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, pid))
 
-
-
+# Normalizes brand values for matching and filtering (removes accents, punctuation, casing differences)
 def norm_brand(s: str) -> str:
     if not s:
         return ""
-
-    # 1) Normalize unicode (turn “Crème” -> “Crème” decomposed)
     s = unicodedata.normalize("NFKD", s)
-
-    # 2) Drop diacritics (remove the combining accent marks)
     s = "".join(ch for ch in s if not unicodedata.combining(ch))
-
-    # 3) Lowercase + trim
     s = s.lower().strip()
-
-    # 4) Keep only letters and digits (stitching is OK for matching)
     s = re.sub(r"[^a-z0-9]+", "", s)
 
     return s
 
-
-
-# ---------------- BUILD EMBEDDING TEXT ----------------
+# Builds the text that will be embedded for each product record
 def build_embedding_text(row):
     return f"""
 Product Description:{row[DESC_COL]}
@@ -83,7 +70,7 @@ Product Description:{row[DESC_COL]}
 texts = df.apply(build_embedding_text, axis=1).tolist()
 product_ids = df.apply(build_product_id, axis=1).tolist()
 
-# ---------------- EMBED + UPSERT ----------------
+# Generates embeddings in batches and upserts them into Qdrant with metadata payload
 total_batches = math.ceil(len(texts) / BATCH_SIZE)
 
 for batch_idx in range(total_batches):
@@ -94,7 +81,6 @@ for batch_idx in range(total_batches):
     batch_rows = df.iloc[start:end]
     batch_pids = product_ids[start:end]
 
-    # 1️⃣ Create embeddings
     response = client.embeddings.create(
         model=EMBED_MODEL,
         input=batch_texts
@@ -130,7 +116,6 @@ for batch_idx in range(total_batches):
             )
         )
 
-    # 2️⃣ Upsert batch
     qdrant.upsert(
         collection_name=COLLECTION_NAME,
         points=points
@@ -138,4 +123,4 @@ for batch_idx in range(total_batches):
 
     print(f"Inserted batch {batch_idx + 1}/{total_batches}")
 
-print("✅ Product descriptions + key ingredients embedded successfully")
+print("Product descriptions embedded successfully")
