@@ -14,10 +14,12 @@ product_selector = 'a.css-11s14hs'
 all_links = set()
 productLinks = []
 
+# Collects all currently loaded product links from the page
 def get_all_product_links():
     elements = driver.find_elements(By.CSS_SELECTOR, product_selector)
     return {el.get_attribute("href") for el in elements if el.get_attribute("href")}
 
+# Scrolls down gradually to trigger lazy loading until the page height stops changing
 def smooth_scroll_to_bottom(step=300, pause=0.7, max_no_change=3):
     no_change_count = 0
     last_height = driver.execute_script("return document.body.scrollHeight")
@@ -33,11 +35,12 @@ def smooth_scroll_to_bottom(step=300, pause=0.7, max_no_change=3):
             no_change_count = 0
             last_height = new_height
 
-# Initial scroll + load
+# Loads the initial set of products by scrolling and collecting visible links
 smooth_scroll_to_bottom()
 all_links.update(get_all_product_links())
 print(f"Initially loaded products: {len(all_links)}")
 
+# Continuously clicks "Show More" to load additional products until the button is no longer available
 while True:
     try:
         smooth_scroll_to_bottom()
@@ -62,16 +65,16 @@ while True:
         print("No more 'Show More' button or exception:", e)
         break
 
-
 print(f"\nDone! Total products found: {len(all_links)}")
 
+# Extracts Product IDs from product URLs and stores them alongside their links
 for link in all_links:
     match = re.search(r'(P\d+)', link)
     if match:
         pid = match.group(1)
         productLinks.append({"Link": link, "Product ID": pid})
 
-# Save to CSV
+# Saves the collected product links and IDs into a CSV file
 df = pd.DataFrame(productLinks)
 df = df.drop_duplicates(subset="Product ID")  # remove duplicates
 csv_file = "Sephora_Products1.csv"

@@ -1,24 +1,25 @@
 import pandas as pd
 import datetime as date
 
-# Load datasets
+# Loads product details and review datasets, merges them by product_id, adds seasonal labels, and exports a cleaned reviews file
 df_sephora = pd.read_csv("Sephora_Products/Sephora_Product_Details.csv", low_memory=False)
 df_reviews = pd.read_csv("Init_Sephora_Product_Reviews.csv", low_memory=False)
 
-# Keep only product_id + product name
+# Keeps only the product fields needed for joining (product_id, product, brand)
 df_sephora_small = df_sephora[["product_id", "product", "brand"]].drop_duplicates()
 
-# Merge reviews with product names
+# Merges review records with product details using product_id as the join key
 df_inner = pd.merge(
     df_sephora_small,
     df_reviews,
     how="inner",
     on="product_id"
 )
-# Convert timestamp to datetime if needed
+
+# Converts submission_time into datetime format for time-based transformations
 df_inner['submission_time'] = pd.to_datetime(df_inner['submission_time'])
 
-# Function to classify season
+# Classifies review timestamps into seasonal categories based on the month value
 def classify_season(date):
     month = date.month
     
@@ -29,14 +30,15 @@ def classify_season(date):
     else:
         return "Other"  # Apr, May
 
+# Drops unused review-related columns to keep the final dataset focused
 columns_to_drop = ["eye_color", "hair_color", "product_name"]
 df_combined = df_inner.drop(columns=columns_to_drop, errors='ignore')
 
-# Apply to DataFrame
+# Applies seasonal classification to each review record
 df_combined['season_category'] = df_combined['submission_time'].apply(classify_season)
 
-# Add source column
+# Adds a source flag to identify where the reviews were collected from
 df_combined['source'] = 'Sephora'
 
-# Save to CSV
+# Saves the final merged and labeled reviews dataset to CSV
 df_combined.to_csv("Sephora_Product_Reviews.csv", index=False, encoding="utf-8-sig")

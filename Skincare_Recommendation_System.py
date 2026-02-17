@@ -1,14 +1,12 @@
 import streamlit as st
 import traceback
 
-from SearchQuery import (
-    recommend_top_20_products,
+from Rag_Recommendation_Pipeline import (
+    recommend_top_5_products,
     make_review_insights,
 )
 
-# =========================================================
-# Helpers
-# =========================================================
+# Helper functions
 def snip(text: str, n: int = 220) -> str:
     if not text:
         return ""
@@ -16,9 +14,7 @@ def snip(text: str, n: int = 220) -> str:
     return t[:n] + ("..." if len(t) > n else "")
 
 
-# =========================================================
-# UI helpers
-# =========================================================
+# UI rendering for a single product card, with expandable details and on-demand review insights
 def render_product_card(p: dict, title: str = "") -> None:
     if title:
         st.markdown(f"### {title}")
@@ -69,9 +65,7 @@ def render_product_card(p: dict, title: str = "") -> None:
         else:
             st.caption("No how-to-use instructions.")
 
-    # =====================================================
     # Review insights (ON DEMAND)
-    # =====================================================
     pid = p.get("product_id") or ""
 
     if st.button(
@@ -100,20 +94,16 @@ def render_product_card(p: dict, title: str = "") -> None:
     st.divider()
 
 
-# =========================================================
-# Page config
-# =========================================================
+# Page setup
 st.set_page_config(page_title="Skincare Recommender", layout="wide")
 st.title("Skincare Product Recommender")
 
-# =========================================================
 # Session state init
-# =========================================================
 if "last_out" not in st.session_state:
     st.session_state.last_out = None
 
 if "last_query" not in st.session_state:
-    st.session_state.last_query = "cleanser from la roche posay under $30"
+    st.session_state.last_query = "cleanser by la roche posay under $30"
 
 if "pending_query" not in st.session_state:
     st.session_state.pending_query = None
@@ -122,9 +112,7 @@ if "insights_cache" not in st.session_state:
     st.session_state.insights_cache = {}  # product_id -> insights
 
 
-# =========================================================
 # Sidebar (INPUT ONLY)
-# =========================================================
 with st.sidebar:
     st.header("Search")
 
@@ -132,9 +120,9 @@ with st.sidebar:
         query = st.text_input(
             "Query",
             value=st.session_state.last_query,
-            help="Example: cleanser from la roche posay under $30",
+            help="Example: cleanser by la roche posay under $30",
         )
-        show_top3 = st.checkbox("Show Top 3", value=False)
+        show_top3 = st.checkbox("Show Top 3", value=True)
         submitted = st.form_submit_button("Recommend")
 
     if submitted:
@@ -142,16 +130,15 @@ with st.sidebar:
         st.session_state.pending_query = query
 
 
-# =========================================================
+
 # Backend call
-# =========================================================
 if st.session_state.pending_query:
     q = st.session_state.pending_query
     st.session_state.pending_query = None
 
     try:
         with st.spinner("Finding the best products for you…"):
-            st.session_state.last_out = recommend_top_20_products(q)
+            st.session_state.last_out = recommend_top_5_products(q)
     except Exception:
         st.error("Backend crashed:")
         st.code(traceback.format_exc())
@@ -171,9 +158,8 @@ if out.get("message"):
 best = out.get("best_product")
 stage_b = out.get("stage_b") or []
 
-# =========================================================
+
 # Best product
-# =========================================================
 st.subheader("Recommended product")
 
 if not best:
@@ -182,9 +168,8 @@ if not best:
 
 render_product_card(best, title="Best match")
 
-# =========================================================
+
 # Top 3 (optional)
-# =========================================================
 if show_top3:
     st.subheader("Top 3 candidates")
 

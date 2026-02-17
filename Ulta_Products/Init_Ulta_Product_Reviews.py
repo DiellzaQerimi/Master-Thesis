@@ -8,6 +8,7 @@ BASE_URL = "https://display.powerreviews.com"
 API_KEY = "daa0f241-c242-4483-afb7-4449942d1a2b"
 PAGE_SIZE = 24
 
+# Fetches all user reviews for a given Ulta product_id using paginated PowerReviews API requests
 def fetch_user_reviews(product_id):
     user_reviews = []
     offset = 0  # PowerReviews uses 1-based indexing
@@ -65,6 +66,7 @@ def fetch_user_reviews(product_id):
 
     return user_reviews
 
+# Reads product IDs from input CSV, fetches reviews for each product, and saves all reviews to an output CSV
 def main():
     all_user_reviews = []
 

@@ -8,6 +8,8 @@ LIMIT = 100  # max reviews per request
 INPUT_CSV = "Sephora_Products.csv"   # input file with product IDs  
 OUTPUT_CSV = "Init_Sephora_Product_Reviews.csv"  # output file with product reviews
 
+
+# Fetches all user reviews for a given product ID using paginated API requests
 def fetch_user_reviews(product_id):
     offset = 0
     total = 1
@@ -30,7 +32,6 @@ def fetch_user_reviews(product_id):
         data = response.json()
 
         total = data.get("TotalResults", 0)
-
         results = data.get("Results", [])
 
         for review in results:
@@ -52,12 +53,13 @@ def fetch_user_reviews(product_id):
                 "eye_color": context.get("eyeColor", {}).get("ValueLabel", ""),
             })
 
-
         offset += LIMIT
         time.sleep(0.2)
 
     return user_reviews
 
+
+# Reads product IDs from input CSV, fetches reviews for each product, and saves them to output CSV
 def main():
     all_user_reviews = []
 
@@ -81,6 +83,7 @@ def main():
         print(f"\n Saved {len(all_user_reviews)} user reviews to '{OUTPUT_CSV}'")
     else:
         print("\nNo user reviews found to save.")
+
 
 if __name__ == "__main__":
     main()
